@@ -850,3 +850,74 @@ if __name__ == "__main__":
 def build_fruitasio_html(out_path: Path, target_lines: int, c: Dict[str, str]) -> None:
     ui_salt = c["SALT_UI"]
     theme = secrets.choice(["mango", "lychee", "grapefruit", "dragonfruit", "kiwi", "papaya", "plum"])
+
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fruitasio • PolyXer Console</title>
+  <style>
+    :root{{
+      --bg:#0b0e14;--panel:#111827;--panel2:#0f172a;--text:#e5e7eb;--muted:#9ca3af;--line:#243041;
+      --good:#22c55e;--bad:#ef4444;--warn:#f59e0b;--accent:#60a5fa;--accent2:#a78bfa;
+      --chip:#0b1220;--shadow:0 12px 30px rgba(0,0,0,.45);--radius:16px;
+    }}
+    html,body{{height:100%}}
+    body{{margin:0;background:radial-gradient(1200px 700px at 20% 10%,rgba(96,165,250,.18),transparent 55%),
+                     radial-gradient(900px 600px at 80% 20%,rgba(167,139,250,.16),transparent 50%),var(--bg);
+         color:var(--text);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial}}
+    .wrap{{max-width:1180px;margin:0 auto;padding:26px}}
+    .top{{display:flex;gap:14px;align-items:center;justify-content:space-between;margin-bottom:18px}}
+    .brand{{display:flex;gap:12px;align-items:center}}
+    .logo{{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+          box-shadow:var(--shadow);display:grid;place-items:center;font-weight:900}}
+    .title{{line-height:1.1}}
+    .title b{{display:block;font-size:18px;letter-spacing:.2px}}
+    .title small{{color:var(--muted)}}
+    .grid{{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}}
+    .card{{background:linear-gradient(180deg,rgba(17,24,39,.92),rgba(15,23,42,.9));
+          border:1px solid rgba(36,48,65,.85);border-radius:var(--radius);box-shadow:var(--shadow)}}
+    .hd{{padding:14px 14px 10px;border-bottom:1px solid rgba(36,48,65,.6);display:flex;align-items:center;justify-content:space-between;gap:10px}}
+    .hd .k{{font-weight:800;letter-spacing:.2px}}
+    .bd{{padding:14px}}
+    .row{{display:flex;gap:10px;flex-wrap:wrap;align-items:center}}
+    .chip{{background:linear-gradient(180deg,rgba(11,18,32,.95),rgba(11,21,42,.92));border:1px solid rgba(36,48,65,.7);
+          border-radius:999px;padding:6px 10px;color:var(--muted);font-size:12px}}
+    .pill{{border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;border:1px solid rgba(36,48,65,.85)}}
+    .pill.good{{background:rgba(34,197,94,.12);color:#86efac}}
+    .pill.bad{{background:rgba(239,68,68,.12);color:#fca5a5}}
+    .pill.warn{{background:rgba(245,158,11,.12);color:#fdba74}}
+    button,input,select{{font:inherit}}
+    .btn{{cursor:pointer;border-radius:14px;padding:10px 12px;border:1px solid rgba(36,48,65,.85);
+         background:linear-gradient(180deg,rgba(96,165,250,.12),rgba(167,139,250,.06));color:var(--text)}}
+    .btn:active{{transform:translateY(1px)}}
+    .btn.ghost{{background:transparent}}
+    .inp{{border-radius:14px;padding:10px 12px;border:1px solid rgba(36,48,65,.85);background:rgba(0,0,0,.12);color:var(--text);min-width:120px}}
+    .kv{{display:grid;grid-template-columns:140px 1fr;gap:8px 12px;align-items:center}}
+    .kv .k{{color:var(--muted)}}
+    .log{{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;font-size:12px;line-height:1.45;max-height:420px;
+         overflow:auto;border-radius:14px;border:1px solid rgba(36,48,65,.75);background:rgba(0,0,0,.18);padding:10px;white-space:pre}}
+    .split{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
+    .mono{{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace}}
+    .hint{{color:var(--muted);font-size:12px}}
+    .foot{{margin-top:14px;color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <div class="logo">FX</div>
+        <div class="title">
+          <b>Fruitasio</b>
+          <small class="mono">poly copy-cat console • ui-salt: {ui_salt[:10]}…</small>
+        </div>
+      </div>
+      <div class="row">
+        <span class="chip">API: <span id="apiBase" class="mono">http://127.0.0.1:8891</span></span>
+        <button class="btn ghost" id="btnPing">Ping</button>
+        <button class="btn" id="btnRefresh">Refresh</button>
+      </div>
+    </div>
+    <div class="grid">
