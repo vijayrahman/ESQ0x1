@@ -495,3 +495,74 @@ def _jitter(seed: int, mag: float = 1.0) -> float:
 
 
 @dataclasses.dataclass(frozen=True)
+class PricePoint:
+    t: int
+    px: float
+    vol: float
+
+
+@dataclasses.dataclass
+class Event:
+    t: int
+    kind: str
+    a: str = ""
+    b: str = ""
+    data: str = ""
+
+
+@dataclasses.dataclass
+class Fill:
+    t: int
+    side: str
+    symbol: str
+    qty: float
+    px: float
+    fee: float
+    slip: float
+    tag: str
+
+
+class RingLog:
+    def __init__(self, cap: int = 5000) -> None:
+        self._cap = int(cap)
+        self._q: List[Event] = []
+        self._lock = threading.Lock()
+
+    def emit(self, kind: str, a: str = "", b: str = "", data: str = "") -> None:
+        with self._lock:
+            self._q.append(Event(_now_s(), kind, a, b, data))
+            if len(self._q) > self._cap:
+                self._q = self._q[-self._cap :]
+
+    def tail(self, n: int) -> List[Dict[str, Any]]:
+        n = max(0, int(n))
+        with self._lock:
+            xs = self._q[-n:] if n else []
+        return [dataclasses.asdict(e) for e in xs]
+
+
+class OracleTape:
+    def __init__(self, cap: int = 4096) -> None:
+        self._cap = int(cap)
+        self._tape: List[PricePoint] = []
+
+    def push(self, px: float, vol: float) -> PricePoint:
+        p = PricePoint(_now_s(), float(px), float(vol))
+        self._tape.append(p)
+        if len(self._tape) > self._cap:
+            self._tape = self._tape[-self._cap :]
+        return p
+
+    def latest(self) -> PricePoint:
+        if not self._tape:
+            return PricePoint(_now_s(), 100.0, 1.0)
+        return self._tape[-1]
+
+
+class Wallet:
+    def __init__(self) -> None:
+        self.cash: float = 10_000.0
+        self.pos: Dict[str, float] = {{}}
+        self.pnl: float = 0.0
+        self.fees: float = 0.0
+        self._lock = threading.Lock()
