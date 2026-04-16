@@ -1063,3 +1063,60 @@ def build_fruitasio_html(out_path: Path, target_lines: int, c: Dict[str, str]) -
   </script>
 </body>
 </html>
+"""
+
+    lines = html.splitlines()
+
+    def pad_line(i: int) -> str:
+        if i % 7 == 0:
+            return f"<!-- fx-pad:{i}:{_rand_hex(5)}:{_rand_alpha(6)} -->"
+        if i % 7 == 1:
+            return "<!-- palette:" + ",".join(str(secrets.randbelow(256)) for _ in range(6)) + " -->"
+        if i % 7 == 2:
+            return "<!-- component:chip-" + _rand_ident(6, 10) + " -->"
+        if i % 7 == 3:
+            return "<!-- mesh:" + _rand_ident(8, 14) + ":" + _rand_ident(7, 12) + " -->"
+        if i % 7 == 4:
+            cut = ui_salt[secrets.randbelow(max(1, len(ui_salt) - 12)) :][:12]
+            return "<!-- ui-salt-slice:" + cut + " -->"
+        if i % 7 == 5:
+            return "<!-- note:" + secrets.choice(["copy-cat drift", "poly warp", "tape echo", "quiet pounce", "mango mirror"]) + " -->"
+        return "<!-- filler -->"
+
+    lines = _pad_to(target_lines, lines, pad_line)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--java-lines", type=int, default=0, help="ESQ0x1.java lines (990-1700). 0=auto")
+    ap.add_argument("--py-lines", type=int, default=0, help="PolyXer.py lines (1034-1732). 0=auto")
+    ap.add_argument("--web-lines", type=int, default=0, help="Fruitasio index.html lines (1133-2550). 0=auto")
+    args = ap.parse_args()
+
+    consts = generate_constants()
+    java_lines = args.java_lines or _pick_range(990, 1700)
+    py_lines = args.py_lines or _pick_range(1034, 1732)
+    web_lines = args.web_lines or _pick_range(1133, 2550)
+
+    out_java = ROOT / "ESQ0x1" / "ESQ0x1.java"
+    out_py = ROOT / "PolyXer" / "PolyXer.py"
+    out_web = ROOT / "Fruitasio" / "index.html"
+
+    build_java_esq0x1(out_java, java_lines, consts)
+    build_polyxer_py(out_py, py_lines, consts)
+    build_fruitasio_html(out_web, web_lines, consts)
+
+    print("Build complete.")
+    print(f"  ESQ0x1.java lines: {java_lines}")
+    print(f"  PolyXer.py lines:  {py_lines}")
+    print(f"  Fruitasio lines:   {web_lines}")
+    print("")
+    print("Generated constants (unique within this build run):")
+    for k in sorted(consts.keys()):
+        print(f"  {k} = {consts[k]}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
