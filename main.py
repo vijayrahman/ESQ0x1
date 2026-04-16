@@ -779,3 +779,74 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/":
                 if STATIC_FRUITASIO.exists():
                     return _send_bytes(self, 200, STATIC_FRUITASIO.read_bytes(), "text/html; charset=utf-8")
+                return _send_bytes(self, 200, b"<h1>PolyXer</h1><p>Missing Fruitasio/index.html</p>", "text/html; charset=utf-8")
+            return _send_json(self, 404, {{"ok": False, "error": "not_found"}})
+        except Exception as e:
+            CORE.log.emit("ErrGET", "", "", repr(e))
+            return _send_json(self, 500, {{"ok": False, "error": "server", "detail": repr(e)}})
+
+    def do_POST(self) -> None:  # noqa: N802
+        try:
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            body = _read_json(self)
+
+            if path == "/api/oracle":
+                px = float(body.get("px"))
+                vol = float(body.get("vol"))
+                return _send_json(self, 200, {{"ok": True, "point": CORE.push_oracle(px, vol)}})
+            if path == "/api/step":
+                n = int(body.get("n") or 1)
+                return _send_json(self, 200, CORE.step(n))
+            if path == "/api/order":
+                side = str(body.get("side") or "hold")
+                qty = float(body.get("qty") or 0.0)
+                symbol = str(body.get("symbol") or CORE.symbol)
+                return _send_json(self, 200, CORE.order(side, qty, symbol, tag="api"))
+            return _send_json(self, 404, {{"ok": False, "error": "not_found"}})
+        except Exception as e:
+            CORE.log.emit("ErrPOST", "", "", traceback.format_exc()[-1200:])
+            return _send_json(self, 500, {{"ok": False, "error": "server", "detail": repr(e)}})
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=8891)
+    args = ap.parse_args()
+    srv = ThreadingHTTPServer((args.host, args.port), Handler)
+    CORE.log.emit("Start", args.host, str(args.port), "ready")
+    print(f"PolyXer listening on http://{{args.host}}:{{args.port}}")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+
+    lines = code.splitlines()
+
+    def pad_line(i: int) -> str:
+        if i % 5 == 0:
+            return f"_POLY_PAD_{i} = '{_rand_hex(6)}'  # pad"
+        if i % 5 == 1:
+            return f"def _poly_pad_{i}(x: int) -> int: return (x ^ {secrets.randbelow(1<<16)}) + {secrets.randbelow(997)+3}"
+        if i % 5 == 2:
+            return f"_poly_table_{i} = ({secrets.randbelow(999)},{secrets.randbelow(999)},{secrets.randbelow(999)})"
+        if i % 5 == 3:
+            return f"_poly_note_{i} = {secrets.choice(['\"mesh\"','\"tape\"','\"warp\"','\"copy\"'])}"
+        return ""
+
+    lines = _pad_to(target_lines, lines, pad_line)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def build_fruitasio_html(out_path: Path, target_lines: int, c: Dict[str, str]) -> None:
+    ui_salt = c["SALT_UI"]
+    theme = secrets.choice(["mango", "lychee", "grapefruit", "dragonfruit", "kiwi", "papaya", "plum"])
