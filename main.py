@@ -992,3 +992,74 @@ def build_fruitasio_html(out_path: Path, target_lines: int, c: Dict[str, str]) -
     $('apiBase').textContent = api.base;
     function pill(kind){{
       const el=$('pillStatus');
+      el.className='pill ' + (kind==='ok'?'good':(kind==='bad'?'bad':'warn'));
+      el.textContent=kind;
+    }}
+    function fmt(x){{
+      if(x===null||x===undefined)return '-';
+      if(typeof x==='number')return (Math.abs(x)>=1000?x.toFixed(2):x.toFixed(4));
+      return String(x);
+    }}
+    function setState(s){{
+      $('stT').textContent = new Date((s.t||0)*1000).toISOString();
+      $('stPaused').textContent = String(s.paused);
+      $('stSymbol').textContent = s.symbol||'-';
+      $('stPx').textContent = fmt(s.oracle && s.oracle.px);
+      $('stVol').textContent = fmt(s.oracle && s.oracle.vol);
+      $('stSig').textContent = (s.signal && s.signal.side) || '-';
+      $('stScore').textContent = fmt(s.signal && s.signal.score);
+      $('stHeat').textContent = fmt(s.signal && s.signal.heat);
+      $('stWallet').textContent = JSON.stringify(s.wallet||{{}},null,0);
+      $('stRoot').textContent = s.root||'-';
+    }}
+    function renderEvents(xs){{
+      if(!xs||!xs.length){{$('log').textContent='(no events)';return}}
+      const lines = xs.map(e=>{{
+        const t = new Date((e.t||0)*1000).toISOString().replace('T',' ').replace('Z','');
+        return `[${{t}}] ${{e.kind}} ${{e.a||''}} ${{e.b||''}} ${{e.data||''}}`.trim();
+      }});
+      $('log').textContent = lines.join('\\n');
+    }}
+    async function refresh(){{
+      try{{
+        const s = await api.get('/api/state');
+        setState(s);
+        pill('ok');
+      }}catch(err){{pill('bad');console.error(err)}}
+    }}
+    async function ping(){{
+      try{{
+        const h = await api.get('/api/health');
+        pill(h && h.ok ? 'ok' : 'warn');
+      }}catch(err){{pill('bad')}}
+    }}
+    async function loadEvents(){{
+      try{{
+        const lim = parseInt(($('evLim').textContent||'200'),10);
+        const r = await api.get('/api/events?limit='+encodeURIComponent(lim));
+        renderEvents((r && r.events) || []);
+      }}catch(err){{console.error(err)}}
+    }}
+    async function step(){{
+      const n = parseInt(($('inpSteps').value||'1'),10);
+      await api.post('/api/step',{{n:isFinite(n)?n:1}});
+      await refresh();
+      await loadEvents();
+    }}
+    async function order(){{
+      const side = $('selSide').value;
+      const qty = parseFloat($('inpQty').value||'0');
+      await api.post('/api/order',{{side,qty,symbol:$('stSymbol').textContent||'FRUIT-USD'}});
+      await refresh();
+      await loadEvents();
+    }}
+    $('btnRefresh').addEventListener('click', refresh);
+    $('btnPing').addEventListener('click', ping);
+    $('btnEvents').addEventListener('click', loadEvents);
+    $('btnStep').addEventListener('click', step);
+    $('btnOrder').addEventListener('click', order);
+    refresh().then(loadEvents);
+  }})();
+  </script>
+</body>
+</html>
