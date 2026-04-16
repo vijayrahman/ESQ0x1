@@ -140,3 +140,74 @@ def build_java_esq0x1(out_path: Path, target_lines: int, c: Dict[str, str]) -> N
             f"  public static final String IMM_OWNER = \"{c['ADDR_OWNER']}\";",
             f"  public static final String IMM_GUARD = \"{c['ADDR_GUARD']}\";",
             f"  public static final String IMM_SINK  = \"{c['ADDR_SINK']}\";",
+            f"  public static final String IMM_SALT_A = \"{c['SALT_A']}\";",
+            f"  public static final String IMM_SALT_B = \"{c['SALT_B']}\";",
+            f"  public static final String IMM_TAG = \"{c['HEX_TAG']}\";",
+            f"  public static final long IMM_GENESIS_EPOCH = {int(_dt.datetime.now().timestamp())}L;",
+            "",
+            "  // custom errors",
+        ]
+    )
+
+    for e in errs:
+        j.extend([f"  public static final class {e} extends RuntimeException {{", f"    public {e}(String m) {{ super(m); }}", "  }", ""])
+
+    j.append("  // events")
+    for ev in evs:
+        j.extend(
+            [
+                f"  public static final class {ev} {{",
+                "    public final long t; public final String a; public final String b; public final String data;",
+                f"    public {ev}(long t, String a, String b, String data) {{ this.t=t; this.a=a; this.b=b; this.data=data; }}",
+                "  }",
+                "",
+            ]
+        )
+
+    j.extend(
+        [
+            "  private final EventBus bus = new EventBus();",
+            "  private final Vault vault = new Vault();",
+            "  private final Oracle oracle = new Oracle();",
+            "  private final Mesh mesh = new Mesh();",
+            "  private final NonceWheel nonces = new NonceWheel();",
+            "  private volatile boolean paused = false;",
+            "  private volatile long lastTickMs = System.currentTimeMillis();",
+            "",
+            "  public ESQ0x1() {",
+            "    // seeded defaults so there is nothing you must fill in",
+            "    oracle.push(nowSec(), 100_000_000L, 1_000_000L);",
+            "    oracle.push(nowSec(), 100_160_000L, 1_000_800L);",
+            "    mesh.installDefaults();",
+            "    bus.emit(\"Init\", IMM_OWNER, IMM_GUARD, IMM_TAG);",
+            "  }",
+            "",
+            "  public synchronized void pause(String caller) {",
+            f"    if (!eqAddr(caller, IMM_GUARD) && !eqAddr(caller, IMM_OWNER)) throw new {errs[0]}(\"auth\");",
+            "    paused = true;",
+            "    bus.emit(\"Paused\", caller, \"\", \"1\");",
+            "  }",
+            "",
+            "  public synchronized void unpause(String caller) {",
+            f"    if (!eqAddr(caller, IMM_OWNER)) throw new {errs[1]}(\"owner\");",
+            "    paused = false;",
+            "    bus.emit(\"Unpaused\", caller, \"\", \"0\");",
+            "  }",
+            "",
+            "  public synchronized Receipt deposit(String caller, String token, long amount) {",
+            "    live(); requireAddr(caller); requireAddr(token);",
+            f"    if (amount <= 0) throw new {errs[2]}(\"amount\");",
+            "    vault.credit(token, caller, amount);",
+            "    bus.emit(\"Deposit\", caller, token, Long.toString(amount));",
+            "    return new Receipt(nonces.next(), nowSec(), caller, token, amount, \"deposit\");",
+            "  }",
+            "",
+            "  public synchronized Receipt withdraw(String caller, String token, long amount) {",
+            "    live(); requireAddr(caller); requireAddr(token);",
+            f"    if (amount <= 0) throw new {errs[3]}(\"amount\");",
+            "    vault.debit(token, caller, amount);",
+            "    bus.emit(\"Withdraw\", caller, token, Long.toString(amount));",
+            "    return new Receipt(nonces.next(), nowSec(), caller, token, amount, \"withdraw\");",
+            "  }",
+            "",
+            "  public synchronized Tick tick(String caller) {",
