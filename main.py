@@ -566,3 +566,74 @@ class Wallet:
         self.pnl: float = 0.0
         self.fees: float = 0.0
         self._lock = threading.Lock()
+
+    def snapshot(self) -> Dict[str, Any]:
+        with self._lock:
+            return {{"cash": self.cash, "pos": dict(self.pos), "pnl": self.pnl, "fees": self.fees}}
+
+    def apply_fill(self, fill: Fill) -> None:
+        with self._lock:
+            side = fill.side.lower()
+            qty = float(fill.qty)
+            cost = fill.px * qty
+            if side == "buy":
+                self.cash -= cost + fill.fee
+                self.pos[fill.symbol] = self.pos.get(fill.symbol, 0.0) + qty
+            else:
+                self.cash += cost - fill.fee
+                self.pos[fill.symbol] = self.pos.get(fill.symbol, 0.0) - qty
+            self.fees += fill.fee
+
+
+class PolyCopyCat:
+    def __init__(self, salt: str) -> None:
+        self.salt = salt
+        self.bias = random.Random(int.from_bytes(_sha256(salt.encode("utf-8")), "big")).random()
+
+    def signal(self, p: PricePoint) -> Dict[str, Any]:
+        x = math.log(max(1e-9, p.px))
+        v = math.log(max(1e-9, p.vol))
+        s1 = math.sin(x * (1.3 + self.bias))
+        s2 = math.cos(v * (0.7 + self.bias / 2.0))
+        raw = (s1 * 0.65 + s2 * 0.35) + _jitter(int(p.t + p.px * 10), 0.05)
+        score = float(_clamp(raw, -1.0, 1.0))
+        side = "buy" if score > 0.18 else ("sell" if score < -0.18 else "hold")
+        return {{"side": side, "score": score, "heat": abs(score)}}
+
+
+class RiskGates:
+    def __init__(self) -> None:
+        self.max_notional = 2_000.0
+        self.max_pos = 30.0
+        self.daily_loss_stop = -600.0
+
+    def check(self, wallet: Wallet, symbol: str, side: str, qty: float, px: float) -> Tuple[bool, str]:
+        w = wallet.snapshot()
+        notional = qty * px
+        if notional > self.max_notional:
+            return False, "max_notional"
+        pos = w["pos"].get(symbol, 0.0)
+        nxt = pos + qty if side == "buy" else pos - qty
+        if abs(nxt) > self.max_pos:
+            return False, "max_pos"
+        if w["pnl"] <= self.daily_loss_stop:
+            return False, "daily_loss_stop"
+        if w["cash"] < 50.0 and side == "buy":
+            return False, "low_cash"
+        return True, "ok"
+
+
+class MicroExchange:
+    def __init__(self, log: RingLog) -> None:
+        self.log = log
+        self.fee_bps = 8.0
+        self.slip_bps = 12.0
+
+    def fill(self, side: str, symbol: str, qty: float, ref_px: float, tag: str) -> Fill:
+        side = side.lower().strip()
+        qty = float(max(0.0, qty))
+        base = float(ref_px)
+        dir_ = 1.0 if side == "buy" else -1.0
+        slip = base * (self.slip_bps / 10_000.0) * (0.3 + random.random())
+        px = base + dir_ * slip
+        fee = abs(px * qty) * (self.fee_bps / 10_000.0)
