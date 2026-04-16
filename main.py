@@ -708,3 +708,74 @@ class PolyXerCore:
         for i in range(n):
             p = self.oracle.latest()
             s = self.sig.signal(p)
+            side = s["side"]
+            if side == "hold":
+                self.log.emit("Hold", "", "", f"score={{s['score']:.4f}}")
+            else:
+                qty = float(_clamp(1.0 + s["heat"] * 4.5, 0.3, 5.5))
+                res = self.order(side, qty, self.symbol, tag=f"auto:{{i}}")
+                if res.get("ok") and res.get("fill"):
+                    fills.append(res["fill"])
+            drift = _jitter(int(p.t + i * 13), 0.22) + (0.04 if side == "buy" else (-0.04 if side == "sell" else 0.0))
+            nxt_px = float(max(1e-6, p.px * (1.0 + drift / 100.0)))
+            nxt_vol = float(max(1e-6, p.vol * (1.0 + abs(drift) / 50.0)))
+            self.push_oracle(nxt_px, nxt_vol)
+        digest = _b64u(_sha256(json.dumps(fills, separators=(",", ":")).encode("utf-8")))
+        self.log.emit("Step", "", "", digest)
+        return {{"ok": True, "fills": fills, "digest": digest}}
+
+
+CORE = PolyXerCore()
+
+
+def _read_json(req: BaseHTTPRequestHandler, limit: int = 120_000) -> Dict[str, Any]:
+    n = int(req.headers.get("content-length") or "0")
+    if n < 0 or n > limit:
+        raise ValueError("body size")
+    raw = req.rfile.read(n) if n else b"{{}}"
+    if not raw:
+        return {{}}
+    return json.loads(raw.decode("utf-8"))
+
+
+def _send_json(req: BaseHTTPRequestHandler, status: int, obj: Any) -> None:
+    data = json.dumps(obj, separators=(",", ":"), sort_keys=False).encode("utf-8")
+    req.send_response(status)
+    req.send_header("content-type", "application/json; charset=utf-8")
+    req.send_header("cache-control", "no-store")
+    req.send_header("content-length", str(len(data)))
+    req.end_headers()
+    req.wfile.write(data)
+
+
+def _send_bytes(req: BaseHTTPRequestHandler, status: int, data: bytes, ctype: str) -> None:
+    req.send_response(status)
+    req.send_header("content-type", ctype)
+    req.send_header("cache-control", "no-store")
+    req.send_header("content-length", str(len(data)))
+    req.end_headers()
+    req.wfile.write(data)
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "PolyXer/1.0"
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        CORE.log.emit("HTTP", self.command, self.path, fmt % args if args else fmt)
+
+    def do_GET(self) -> None:  # noqa: N802
+        try:
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            qs = urllib.parse.parse_qs(parsed.query or "")
+
+            if path == "/api/health":
+                return _send_json(self, 200, CORE.health())
+            if path == "/api/state":
+                return _send_json(self, 200, CORE.state())
+            if path == "/api/events":
+                lim = int((qs.get("limit") or ["200"])[0])
+                return _send_json(self, 200, {{"events": CORE.log.tail(lim)}})
+            if path == "/":
+                if STATIC_FRUITASIO.exists():
+                    return _send_bytes(self, 200, STATIC_FRUITASIO.read_bytes(), "text/html; charset=utf-8")
