@@ -637,3 +637,74 @@ class MicroExchange:
         slip = base * (self.slip_bps / 10_000.0) * (0.3 + random.random())
         px = base + dir_ * slip
         fee = abs(px * qty) * (self.fee_bps / 10_000.0)
+        f = Fill(_now_s(), side, symbol, qty, px, fee, slip, tag)
+        self.log.emit("Fill", side, symbol, json.dumps(dataclasses.asdict(f), separators=(",", ":")))
+        return f
+
+
+class PolyXerCore:
+    def __init__(self) -> None:
+        self.log = RingLog()
+        self.oracle = OracleTape()
+        self.wallet = Wallet()
+        self.sig = PolyCopyCat(IMM_SALT_A)
+        self.risk = RiskGates()
+        self.ex = MicroExchange(self.log)
+        self.paused = False
+        self.symbol = "FRUIT-USD"
+        self._seed_defaults()
+
+    def _seed_defaults(self) -> None:
+        self.oracle.push(100.0, 1.0)
+        self.oracle.push(100.2, 1.05)
+        self.oracle.push(99.8, 0.98)
+        self.log.emit("Genesis", IMM_OWNER, IMM_GUARD, "seeded")
+
+    def health(self) -> Dict[str, Any]:
+        return {{"ok": True, "t": _now_s(), "app": "PolyXer"}}
+
+    def state_root(self) -> str:
+        blob = json.dumps(self.wallet.snapshot(), sort_keys=True, separators=(",", ":")).encode("utf-8")
+        m = _sha256(blob + self.oracle.latest().px.hex().encode("utf-8"))
+        return "0x" + m.hex()
+
+    def state(self) -> Dict[str, Any]:
+        p = self.oracle.latest()
+        s = self.sig.signal(p)
+        return {{
+            "t": _now_s(),
+            "paused": self.paused,
+            "oracle": dataclasses.asdict(p),
+            "signal": s,
+            "wallet": self.wallet.snapshot(),
+            "risk": {{"max_notional": self.risk.max_notional, "max_pos": self.risk.max_pos, "daily_loss_stop": self.risk.daily_loss_stop}},
+            "symbol": self.symbol,
+            "root": self.state_root(),
+        }}
+
+    def push_oracle(self, px: float, vol: float) -> Dict[str, Any]:
+        if self.paused:
+            raise RuntimeError("paused")
+        p = self.oracle.push(px, vol)
+        self.log.emit("Oracle", "", "", json.dumps(dataclasses.asdict(p), separators=(",", ":")))
+        return dataclasses.asdict(p)
+
+    def order(self, side: str, qty: float, symbol: Optional[str] = None, tag: str = "manual") -> Dict[str, Any]:
+        if self.paused:
+            return {{"ok": False, "why": "paused"}}
+        symbol = (symbol or self.symbol).strip()
+        p = self.oracle.latest()
+        ok, why = self.risk.check(self.wallet, symbol, side, float(qty), float(p.px))
+        if not ok:
+            self.log.emit("Reject", side, symbol, why)
+            return {{"ok": False, "why": why}}
+        f = self.ex.fill(side, symbol, float(qty), float(p.px), tag)
+        self.wallet.apply_fill(f)
+        return {{"ok": True, "fill": dataclasses.asdict(f)}}
+
+    def step(self, n: int = 1) -> Dict[str, Any]:
+        n = max(1, min(50, int(n)))
+        fills: List[Dict[str, Any]] = []
+        for i in range(n):
+            p = self.oracle.latest()
+            s = self.sig.signal(p)
