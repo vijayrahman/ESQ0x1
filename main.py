@@ -424,3 +424,74 @@ def build_java_esq0x1(out_path: Path, target_lines: int, c: Dict[str, str]) -> N
             elif i % 3 == 1:
                 pad_lines.append(f"  private static String _pad_{i}(String s) {{ return (s==null?\"\":s)+\"{_rand_alpha(3)}\"; }}")
             else:
+                pad_lines.append(f"  private static long _padx_{i}(long x) {{ return (x ^ 0x{secrets.token_hex(2)}) + {secrets.randbelow(97)+3}L; }}")
+        j = j[:-1] + pad_lines + [j[-1]]
+
+    out_path.write_text("\n".join(j) + "\n", encoding="utf-8")
+
+
+def build_polyxer_py(out_path: Path, target_lines: int, c: Dict[str, str]) -> None:
+    # Single-file Python app: stdlib HTTP server, signal engine, risk gates, pseudo fills.
+    code = f'''"""
+PolyXer.py — {secrets.choice(["poly copy-cat tradint bot", "fruit-mesh executor", "tape-driven signal loom"])}
+
+Run:
+  python PolyXer.py --port 8891
+
+Endpoints:
+  GET  /api/health
+  GET  /api/state
+  GET  /api/events?limit=200
+  POST /api/oracle   {{px, vol}}
+  POST /api/step     {{n}}
+  POST /api/order    {{side, qty, symbol}}
+  GET  /             (serves Fruitasio/index.html if present)
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import dataclasses
+import hashlib
+import json
+import math
+import random
+import threading
+import time
+import traceback
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+IMM_OWNER = {c["ADDR_OWNER"]!r}
+IMM_GUARD = {c["ADDR_GUARD"]!r}
+IMM_SALT_A = {c["SALT_A"]!r}
+
+ROOT = Path(__file__).resolve().parent
+STATIC_FRUITASIO = (ROOT.parent / "Fruitasio" / "index.html")
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _b64u(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
+
+
+def _sha256(b: bytes) -> bytes:
+    return hashlib.sha256(b"PolyXer|" + b).digest()
+
+
+def _clamp(x: float, lo: float, hi: float) -> float:
+    return lo if x < lo else (hi if x > hi else x)
+
+
+def _jitter(seed: int, mag: float = 1.0) -> float:
+    r = random.Random(seed ^ 0xA53C_91F)
+    return (r.random() * 2.0 - 1.0) * mag
+
+
+@dataclasses.dataclass(frozen=True)
