@@ -921,3 +921,74 @@ def build_fruitasio_html(out_path: Path, target_lines: int, c: Dict[str, str]) -
       </div>
     </div>
     <div class="grid">
+      <div class="card">
+        <div class="hd">
+          <div class="k">State</div>
+          <div class="row">
+            <span class="pill warn" id="pillStatus">unknown</span>
+            <span class="chip">theme: {theme}</span>
+          </div>
+        </div>
+        <div class="bd">
+          <div class="kv">
+            <div class="k">timestamp</div><div class="mono" id="stT">-</div>
+            <div class="k">paused</div><div class="mono" id="stPaused">-</div>
+            <div class="k">symbol</div><div class="mono" id="stSymbol">-</div>
+            <div class="k">oracle px</div><div class="mono" id="stPx">-</div>
+            <div class="k">oracle vol</div><div class="mono" id="stVol">-</div>
+            <div class="k">signal</div><div class="mono" id="stSig">-</div>
+            <div class="k">score</div><div class="mono" id="stScore">-</div>
+            <div class="k">heat</div><div class="mono" id="stHeat">-</div>
+            <div class="k">wallet</div><div class="mono" id="stWallet">-</div>
+            <div class="k">state root</div><div class="mono" id="stRoot">-</div>
+          </div>
+          <div style="height:10px"></div>
+          <div class="split">
+            <div>
+              <div class="hint">Auto step</div>
+              <div class="row">
+                <input class="inp mono" id="inpSteps" value="3" size="6">
+                <button class="btn" id="btnStep">Step</button>
+              </div>
+            </div>
+            <div>
+              <div class="hint">Manual order</div>
+              <div class="row">
+                <select class="inp mono" id="selSide"><option>buy</option><option>sell</option></select>
+                <input class="inp mono" id="inpQty" value="1.0" size="6">
+                <button class="btn" id="btnOrder">Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="hd">
+          <div class="k">Event stream</div>
+          <div class="row">
+            <span class="chip">limit <span id="evLim" class="mono">200</span></span>
+            <button class="btn ghost" id="btnEvents">Load</button>
+          </div>
+        </div>
+        <div class="bd">
+          <div class="log" id="log">(no events yet)</div>
+        </div>
+      </div>
+    </div>
+    <div class="foot">
+      <div>Fruitasio is a local UI. It won’t place real trades.</div>
+      <div class="mono">ui-salt: {ui_salt}</div>
+    </div>
+  </div>
+  <script>
+  (function(){{
+    const $ = (id)=>document.getElementById(id);
+    const api = {{
+      base: localStorage.getItem('fx_api') || 'http://127.0.0.1:8891',
+      u(p){{return this.base + p}},
+      async get(p){{const r=await fetch(this.u(p),{{cache:'no-store'}});return await r.json()}},
+      async post(p,obj){{const r=await fetch(this.u(p),{{method:'POST',headers:{{'content-type':'application/json'}},body:JSON.stringify(obj)}});return await r.json()}},
+    }};
+    $('apiBase').textContent = api.base;
+    function pill(kind){{
+      const el=$('pillStatus');
