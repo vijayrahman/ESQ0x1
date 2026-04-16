@@ -353,3 +353,74 @@ def build_java_esq0x1(out_path: Path, target_lines: int, c: Dict[str, str]) -> N
             "      if(cur<amt) throw new IllegalStateException(\"insufficient\");",
             "      by.put(who,cur-amt);",
             "    }",
+            "    Snapshot snapshot(){",
+            "      Map<String, Map<String, Long>> c=new HashMap<>();",
+            "      for(Map.Entry<String,Map<String,Long>> e: bal.entrySet()) c.put(e.getKey(), new HashMap<>(e.getValue()));",
+            "      return new Snapshot(c);",
+            "    }",
+            "    static final class Snapshot{",
+            "      final Map<String, Map<String, Long>> bal;",
+            "      Snapshot(Map<String, Map<String, Long>> b){this.bal=b;}",
+            "      long balanceOf(String token,String who){ Map<String,Long> by=bal.get(token); return by==null?0L:by.getOrDefault(who,0L); }",
+            "    }",
+            "  }",
+            "",
+            "  private static final class Oracle {",
+            "    private final Deque<PricePoint> tape = new ArrayDeque<>();",
+            "    private final int cap = 2048;",
+            "    void push(long t,long px,long vol){ tape.addLast(new PricePoint(t,px,vol)); while(tape.size()>cap) tape.removeFirst(); }",
+            "    PricePoint latest(){ PricePoint p=tape.peekLast(); return p!=null?p:new PricePoint(nowSec(),100_000_000L,1_000_000L); }",
+            "  }",
+            "",
+            "  private static final class Mesh {",
+            "    private final List<Rule> rules = new ArrayList<>();",
+            "    private final SplittableRandom r = new SplittableRandom(fold(IMM_SALT_A) ^ (fold(IMM_SALT_B) << 1));",
+            "    void installDefaults(){",
+            "      rules.clear();",
+            "      rules.add(new Rule(\"polyMomentum\",13,37));",
+            "      rules.add(new Rule(\"mirrorFade\",9,19));",
+            "      rules.add(new Rule(\"fruitWarp\",7,31));",
+            "      rules.add(new Rule(\"copyCatSkew\",5,23));",
+            "      rules.add(new Rule(\"quietMean\",11,29));",
+            "    }",
+            "    MeshDecision decide(PricePoint p, Vault.Snapshot s){",
+            "      long score=0;",
+            "      StringBuilder hint=new StringBuilder(96);",
+            "      for(Rule ru: rules){ long x=ru.eval(p); score += x; if(hint.length()<88) hint.append(ru.name).append('=').append(x).append(' '); }",
+            "      String mode=(score%3==0)?\"scan\":((score%3==1)?\"pounce\":\"blend\");",
+            "      int k=1+(int)(Math.abs(score)%3);",
+            "      List<TradeIntent> intents=new ArrayList<>();",
+            "      for(int i=0;i<k;i++){",
+            "        String tokenIn=(i%2==0)?IMM_OWNER:IMM_GUARD;",
+            "        String tokenOut=(i%2==0)?IMM_GUARD:IMM_OWNER;",
+            "        long amt=10_000L + (Math.abs(score)%250_000L);",
+            "        long rate=9_000L + (Math.abs(score)%2_000L);",
+            "        String memo=mode+\"#\"+i+\":\"+(char)('a'+(int)(Math.abs(score)%26));",
+            "        intents.add(new TradeIntent(tokenIn,tokenOut,amt,rate,memo));",
+            "      }",
+            "      return new MeshDecision(mode,score,hint.toString().trim(),intents);",
+            "    }",
+            "    static final class Rule{",
+            "      final String name; final long a,b;",
+            "      Rule(String n,long a,long b){this.name=n;this.a=a;this.b=b;}",
+            "      long eval(PricePoint p){ long x=(p.px/10_000L) ^ (p.vol/1_000L); x=(x*a+b) ^ (x>>>3); x=(x%100_000L)-50_000L; return x; }",
+            "    }",
+            "    private static long fold(String s){ long x=0x9e3779b97f4a7c15L; for(int i=0;i<s.length();i++){ x ^= (s.charAt(i)*0x100000001b3L); x = (x<<7) | (x >>> (64-7)); } return x; }",
+            "  }",
+            "",
+            "}",
+        ]
+    )
+
+    # Insert padding BEFORE final brace to keep Java valid.
+    if not j or j[-1] != "}":
+        raise RuntimeError("unexpected java shape")
+    pad_count = max(0, target_lines - len(j))
+    if pad_count:
+        pad_lines: List[str] = []
+        for i in range(pad_count):
+            if i % 3 == 0:
+                pad_lines.append(f"  private static final long _PAD_{i} = 0x{secrets.token_hex(4)}L;")
+            elif i % 3 == 1:
+                pad_lines.append(f"  private static String _pad_{i}(String s) {{ return (s==null?\"\":s)+\"{_rand_alpha(3)}\"; }}")
+            else:
